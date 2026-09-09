@@ -40,7 +40,17 @@ export const generatedPostSchema = z.object({
   seoTitle: clampedText(20, 70),
   metaDescription: clampedText(100, 180),
   tags: z.preprocess(
-    (v) => (Array.isArray(v) ? v.slice(0, 8) : v),
+    (v) => {
+      if (Array.isArray(v)) return v.slice(0, 8);
+      if (typeof v === "string") {
+        return v
+          .split(/[,;|\n]+/)
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+          .slice(0, 8);
+      }
+      return v;
+    },
     z.array(clampedText(2, 60)).min(2).max(8),
   ),
   // Coerção defensiva: modelos ora devolvem 8, ora "8", ora "8 min" — normaliza
