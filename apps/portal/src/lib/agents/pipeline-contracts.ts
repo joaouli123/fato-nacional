@@ -339,15 +339,16 @@ export type GateDecision = z.infer<typeof gateDecisionSchema>;
 
 export function parseAgentOutput<T>(schema: z.ZodType<T>, value: unknown, label: string): T {
   // Alguns modelos compatíveis envolvem o objeto em uma lista mesmo quando o
-  // contrato pede um objeto. Aceitamos a lista somente quando exatamente um
-  // item satisfaz o schema; respostas ambíguas continuam reprovadas.
+  // contrato pede um objeto. Cada candidato ainda precisa satisfazer o schema;
+  // quando há mais de um candidato válido, usamos o primeiro de forma
+  // determinística e deixamos os gates editoriais fazerem a validação final.
   const parsed = schema.safeParse(value);
   if (parsed.success) return parsed.data;
   if (Array.isArray(value)) {
     const matches = value
       .map((candidate) => schema.safeParse(candidate))
       .filter((result): result is z.ZodSafeParseSuccess<T> => result.success);
-    if (matches.length === 1) return matches[0].data;
+    if (matches.length > 0) return matches[0].data;
   }
   const detail = parsed.error.issues
     .slice(0, 8)
@@ -364,7 +365,7 @@ export function parseAgentOutput<T>(schema: z.ZodType<T>, value: unknown, label:
     }
   }
   if (Array.isArray(value) && value.length > 1) {
-    throw new Error(`${label} inválido: resposta veio em lista com ${value.length} itens; esperado um único objeto`);
+    throw new Error(`${label} inválido: lista com ${value.length} itens, mas nenhum candidato satisfaz o schema`);
   }
   throw new Error(`${label} inválido: ${detail}`);
 }
