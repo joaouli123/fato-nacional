@@ -266,6 +266,7 @@ ${item.mustCover.map((m) => "  - " + m).join("\n")}
 ${research ? `APURAÇÃO ATUAL (fatos e fontes verificados hoje na web — baseie números e citações NISTO, e cite estas fontes):\n${research}` : "Sem apuração externa: NÃO invente números atuais; escreva de forma atemporal e mande o leitor confirmar valores vigentes na fonte oficial."}
 Links internos (inclua todos):
 ${links || "  - (nenhum)"}
+LIMITES TÉCNICOS: mantenha o contentHtml entre 7.000 e 11.000 caracteres (aproximadamente 1.200 a 1.600 palavras), para que o JSON completo não seja truncado. NÃO crie URLs externas novas: use somente URLs presentes na apuração acima; quando não houver URL verificável, cite a fonte pelo nome sem link.
 REGRAS DE OURO 2026 (SEO+GEO+AEO — obrigatórias):
 - O PRIMEIRO parágrafo é uma resposta direta de 40-60 palavras à pergunta do título: completa, autossuficiente e extraível (é o que featured snippets e AI Overviews citam). Contexto vem depois.
 - Formule H2/H3 como a pergunta exata que o leitor faria (estilo People Also Ask); a PRIMEIRA frase de cada seção responde essa pergunta.
@@ -613,7 +614,7 @@ async function createFromPauta(
     await checkpointEditorialRun(payload, run, { stage: "research", artifact: { research } });
 
     // 2) Redação com contrato validado.
-    const w = await generateJson<GenPost>(writePrompt(item, research), { model: GPT, maxTokens: 14_000 });
+    const w = await generateJson<GenPost>(writePrompt(item, research), { model: GPT, maxTokens: 20_000 });
     logAi(item.slug, item.title, "escrita", w);
     let post = parseAgentOutput(generatedPostSchema, w.data, "Rascunho");
     await checkpointEditorialRun(payload, run, {
@@ -736,7 +737,7 @@ async function createFromPauta(
       for (let attempt = 0; attempt < 2 && !candidate; attempt += 1) {
         const fixed = await generateJson<GenPost>(
           fixPrompt(post, seo.requiredFixes, item) + (attempt > 0 ? STRUCTURE_WARNING : ""),
-          { model: GPT, maxTokens: 14_000 },
+          { model: GPT, maxTokens: 20_000 },
         );
         logAi(item.slug, item.title, `correção seo r${round + 1}${attempt > 0 ? " (retry)" : ""}`, fixed);
         const parsed = parseAgentOutput(generatedPostSchema, fixed.data, "Correção SEO");
@@ -835,7 +836,7 @@ async function createFromPauta(
       ])];
       const repaired = await generateJson<GenPost>(repairPrompt(post, repairIssues, item, research), {
         model: GPT,
-        maxTokens: 14_000,
+        maxTokens: 20_000,
       });
       logAi(item.slug, item.title, "reparo", repaired);
       let candidate = parseAgentOutput(generatedPostSchema, repaired.data, "Reparo do gate");
@@ -1189,7 +1190,7 @@ async function runUpdateSlot(
     // 2) Produz uma versão candidata, sem tocar a versão publicada.
     const updateResponse = await generateJson<GenPost>(
       updatePrompt(doc.headline, doc.contentHtml!, research, today),
-      { model: GPT, maxTokens: 14_000 },
+      { model: GPT, maxTokens: 20_000 },
     );
     logAi(doc.slug, doc.headline, "atualização", updateResponse);
     let post = parseAgentOutput(generatedPostSchema, updateResponse.data, "Atualização");
@@ -1240,7 +1241,7 @@ async function runUpdateSlot(
       }
       const fixed = await generateJson<GenPost>(fixPrompt(post, factual.decision.requiredFixes, item), {
         model: GPT,
-        maxTokens: 14_000,
+        maxTokens: 20_000,
       });
       logAi(doc.slug, doc.headline, "correção factual da atualização", fixed);
       post = parseAgentOutput(generatedPostSchema, fixed.data, "Correção factual da atualização");
@@ -1284,7 +1285,7 @@ async function runUpdateSlot(
       }
       const fixed = await generateJson<GenPost>(fixPrompt(post, seo.requiredFixes, item), {
         model: GPT,
-        maxTokens: 14_000,
+        maxTokens: 20_000,
       });
       logAi(doc.slug, doc.headline, "correção SEO da atualização", fixed);
       const candidate = parseAgentOutput(generatedPostSchema, fixed.data, "Correção SEO da atualização");
