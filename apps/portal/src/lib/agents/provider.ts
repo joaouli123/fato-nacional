@@ -175,10 +175,35 @@ async function callProvider(prompt: string, opts: GenerateOptions, routed: Route
     ? { inputTokens: res.usage.prompt_tokens ?? 0, outputTokens: res.usage.completion_tokens ?? 0 }
     : null;
 
+  const message = res.choices[0]?.message as unknown as {
+    content?: unknown;
+    reasoning_content?: unknown;
+  } | undefined;
+
+  const messageText = (value: unknown): string => {
+    if (typeof value === "string") return value;
+    if (!Array.isArray(value)) return "";
+    return value
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (part && typeof part === "object" && "text" in part) {
+          return typeof (part as { text?: unknown }).text === "string" ? (part as { text: string }).text : "";
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n");
+  };
+
+  // Alguns gateways compatíveis expõem o texto em blocos ou em
+  // reasoning_content. Normalizar aqui evita que uma resposta válida chegue
+  // vazia ao parser JSON; o parser ainda valida o contrato antes de publicar.
+  const text = messageText(message?.content) || messageText(message?.reasoning_content);
+
   return {
     provider: routed.provider,
     model,
-    text: res.choices[0]?.message?.content ?? "",
+    text,
     usage,
   };
 }

@@ -51,6 +51,7 @@ export const maxDuration = 800;
 //   RESEARCH (gpt-5-search)  → apuração na web com fontes atuais
 //   HUMANIZER (claude-opus)  → lapidação final (cai p/ GPT sem ANTHROPIC_API_KEY)
 const GPT = modelForTask("writing").model;
+const PLANNER = modelForTask("triage").model;
 const RESEARCH_MODEL = modelForTask("research").model;
 const HUMANIZER = process.env.AI_MODEL_HUMANIZE || "claude-opus-4-8";
 // Etapas de CONFERÊNCIA (têm gabarito: a apuração e o checklist) rodam em modelo
@@ -59,6 +60,52 @@ const GPT_CHECK = modelForTask("fact_check").model;
 const GPT_SEO = modelForTask("seo").model;
 
 const PILLARS = "finanças pessoais, economia do dia a dia, tecnologia e IA, Brasil/serviços públicos, mundo com impacto no Brasil (variedade ocasional: esportes, games, entretenimento)";
+
+// Último recurso para manter a grade viva caso o gateway de IA esteja
+// indisponível ou viole o contrato de pauta. O artigo continua passando por
+// apuração, revisão factual, SEO e os mesmos gates antes de qualquer publicação.
+const AUTOMATION_FALLBACKS: BacklogItem[] = [
+  {
+    slug: "como-montar-orcamento-mensal-organizar-contas",
+    title: "Como montar um orçamento mensal e organizar as contas",
+    category: "financas",
+    author: "Mesa de Economia",
+    type: "guia",
+    primaryKeyword: "como montar um orçamento mensal",
+    words: "1200 a 1600",
+    ymyl: true,
+    angle: "Guia prático e atemporal para mapear renda e despesas, separar contas fixas das variáveis, criar prioridades e acompanhar o orçamento sem prometer fórmulas universais ou recomendar produtos financeiros.",
+    mustCover: [
+      "como listar renda e despesas",
+      "diferença entre gastos fixos e variáveis",
+      "como definir prioridades e limites",
+      "método simples para acompanhar o mês",
+      "erros comuns ao montar um orçamento",
+      "como revisar o orçamento quando a renda muda",
+    ],
+    interlinks: [],
+  },
+  {
+    slug: "como-consultar-seguro-desemprego-pedir-pelo-aplicativo",
+    title: "Como consultar e pedir o seguro-desemprego pelo aplicativo",
+    category: "brasil",
+    author: "Mesa de Economia",
+    type: "serviço",
+    primaryKeyword: "como pedir seguro-desemprego",
+    words: "1200 a 1600",
+    ymyl: false,
+    angle: "Passo a passo para entender quem pode pedir o seguro-desemprego, quais documentos separar, onde fazer a solicitação pelos canais oficiais e como acompanhar o benefício sem inventar prazos ou valores que mudam.",
+    mustCover: [
+      "quem pode ter direito ao benefício",
+      "quais documentos e dados separar",
+      "como solicitar pelos canais oficiais",
+      "como acompanhar o pedido",
+      "o que fazer se houver divergência",
+      "onde buscar atendimento oficial",
+    ],
+    interlinks: [],
+  },
+];
 // Categorias válidas vêm das CONFIGURAÇÕES (/admin) — o formato é validado aqui
 // e a permissão por editoria é aplicada em pautaPolicyError.
 const AUTHOR_BY_CATEGORY: Record<string, string> = {
@@ -972,17 +1019,20 @@ async function pautaForSlot(slot: Slot, existing: Set<string>, articles: Array<{
       const plan = await generateJson<BacklogItem>(
         planNewsPrompt(trends.map((t) => `[${t.source}] ${t.title}`), existingList, candidates, today, settings) +
           (attempt > 0 ? "\nIMPORTANTE: comece a resposta diretamente com { e termine com }. Nada além do JSON." : ""),
-        { model: GPT, maxTokens: 2_000 });
+        { model: PLANNER, maxTokens: 2_000 });
       logAi(plan.data?.slug || "(pauta)", plan.data?.title || "Pauta de notícia (Trends)", "pauta", plan);
-      if (validPauta(plan.data, existing)) {
-        const normalized = normalizePauta({ ...plan.data, type: plan.data.type || "explicador de notícia" });
+      const draft = Array.isArray(plan.data) && plan.data.length === 1 ? plan.data[0] : plan.data;
+      if (validPauta(draft, existing)) {
+        const normalized = normalizePauta({ ...draft, type: draft.type || "explicador de notícia" });
         const policyError = pautaPolicyError(normalized, settings);
         if (!policyError) return normalized;
         lastRaw = policyError;
         continue;
       }
-      lastRaw = plan.raw;
+      lastRaw = plan.raw || `resposta vazia (${plan.provider}/${plan.model})`;
     }
+    const fallback = AUTOMATION_FALLBACKS.find((item) => item.category === "brasil" && !existing.has(item.slug) && !pautaPolicyError(item, settings));
+    if (fallback) return fallback;
     return { error: `pauta de notícia inválida: ${lastRaw.slice(0, 120)}` };
   }
 
@@ -999,17 +1049,24 @@ async function pautaForSlot(slot: Slot, existing: Set<string>, articles: Array<{
     const plan = await generateJson<BacklogItem>(
       planEvergreenPrompt(wantService ? "service" : "evergreen", existingList, candidates, today, settings) +
         (attempt > 0 ? "\nIMPORTANTE: comece a resposta diretamente com { e termine com }. Nada além do JSON." : ""),
-      { model: GPT, maxTokens: 2_000 });
+      { model: PLANNER, maxTokens: 2_000 });
     logAi(plan.data?.slug || "(pauta)", plan.data?.title || "Pauta evergreen/serviço", "pauta", plan);
-    if (validPauta(plan.data, existing)) {
-      const normalized = normalizePauta(plan.data);
+    const draft = Array.isArray(plan.data) && plan.data.length === 1 ? plan.data[0] : plan.data;
+    if (validPauta(draft, existing)) {
+      const normalized = normalizePauta(draft);
       const policyError = pautaPolicyError(normalized, settings);
       if (!policyError) return normalized;
       lastRaw = policyError;
       continue;
     }
-    lastRaw = plan.raw;
+    lastRaw = plan.raw || `resposta vazia (${plan.provider}/${plan.model})`;
   }
+  const fallback = AUTOMATION_FALLBACKS.find((item) =>
+    !existing.has(item.slug) &&
+    (wantService ? item.type === "serviço" : item.type !== "serviço") &&
+    !pautaPolicyError(item, settings),
+  );
+  if (fallback) return fallback;
   return { error: `pauta gerada inválida: ${lastRaw.slice(0, 120)}` };
 }
 
