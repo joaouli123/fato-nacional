@@ -1,0 +1,25 @@
+{
+  "name": "@nexo/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "pnpm --filter @nexo/shared build && tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "lint": "eslint .",
+    "typecheck": "pnpm --filter @nexo/shared build && tsc -p tsconfig.json --noEmit",
+    "test": "pnpm --filter @nexo/shared build && tsx src/smoke-test.ts"
+  },
+  "dependencies": {
+    "@nexo/shared": "workspace:*",
+    "bullmq": "^5.79.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "eslint": "^9",
+    "tsx": "^4.22.4",
+    "typescript": "^5"
+  }
+}

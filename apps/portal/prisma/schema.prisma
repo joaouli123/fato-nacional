@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model ArticleSnapshot {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  description String
+  status      String   @default("draft")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AgentExecution {
+  id         String   @id @default(cuid())
+  agent      String
+  status     String
+  input      Json?
+  output     Json?
+  durationMs Int      @default(0)
+  costUsd    Decimal  @default(0)
+  createdAt  DateTime @default(now())
+}

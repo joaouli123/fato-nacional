@@ -1,0 +1,30 @@
+{
+  "name": "blog-adswords-platform",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": "24.x"
+  },
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "verify:source": "node scripts/verify-source.mjs",
+    "build": "pnpm verify:source && turbo run build",
+    "lint": "pnpm verify:source && eslint apps packages scripts",
+    "typecheck": "pnpm verify:source && turbo run typecheck",
+    "test": "pnpm verify:source && turbo run test",
+    "portal:dev": "pnpm --filter @nexo/portal dev",
+    "portal:build": "pnpm --filter @nexo/portal build",
+    "worker:dev": "pnpm --filter @nexo/worker dev",
+    "scheduler:dev": "pnpm --filter @nexo/scheduler dev",
+    "prisma:generate": "pnpm --filter @nexo/portal prisma:generate",
+    "prisma:migrate": "pnpm --filter @nexo/portal prisma:migrate"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.4",
+    "eslint-config-next": "16.2.9",
+    "turbo": "^2.10.0",
+    "typescript-eslint": "^8.56.1",
+    "typescript": "^5.9.3"
+  }
+}

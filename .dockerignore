@@ -1,0 +1,13 @@
+.git
+.next
+**/.next
+node_modules
+**/node_modules
+.turbo
+**/.turbo
+.tmp
+**/.tmp
+.env
+**/.env
+*.log
+*.tsbuildinfo

@@ -1,0 +1,35 @@
+# dependencies
+/node_modules
+node_modules
+
+# builds
+/.next/
+/apps/**/.next/
+/out/
+/build
+dist/
+apps/**/dist/
+packages/**/dist/
+
+# caches
+.turbo/
+.tmp/
+apps/**/.turbo/
+packages/**/.turbo/
+
+# generated
+*.tsbuildinfo
+next-env.d.ts
+/apps/**/next-env.d.ts
+/apps/portal/src/generated/prisma
+
+# env
+.env*
+!.env.example
+!apps/**/.env.example
+
+# misc
+.DS_Store
+*.pem
+coverage/
+*.log

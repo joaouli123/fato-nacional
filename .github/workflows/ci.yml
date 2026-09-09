@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared
+        run: pnpm --filter @nexo/shared build
+
+      - name: Source integrity
+        run: pnpm verify:source
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm --filter @nexo/portal test:unit
+
+      - name: Typecheck
+        run: pnpm typecheck
