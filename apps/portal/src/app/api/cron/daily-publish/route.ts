@@ -504,6 +504,35 @@ function stripInvalidExternalLinks(html: string, invalid: CheckedExternalSource[
   );
 }
 
+const DEFAULT_CLUSTER_INTERLINKS: Record<string, Array<{ slug: string; anchor: string }>> = {
+  financas: [
+    { slug: "financiamento-imovel-sac-ou-price-como-funciona-qual-escolher", anchor: "como comparar financiamento imobiliário" },
+    { slug: "poupanca-como-funciona-rendimento-regras-vale-a-pena-2026", anchor: "como funciona a poupança" },
+    { slug: "valores-a-receber-banco-central-como-consultar-resgatar", anchor: "consultar valores a receber" },
+  ],
+  brasil: [
+    { slug: "valores-a-receber-banco-central-como-consultar-resgatar", anchor: "consultar valores a receber" },
+    { slug: "salario-minimo-2026-valor-reajuste-o-que-indexa", anchor: "entender o salário mínimo" },
+  ],
+};
+
+function ensureInternalLinks(post: GenPost, item: BacklogItem, knownArticleSlugs: Set<string>): GenPost {
+  const present = new Set(
+    [...post.contentHtml.matchAll(/href=["']\/artigos\/([^"'#?]+)["']/gi)].map((match) => match[1]),
+  );
+  if (present.size >= 3) return post;
+  const candidates = [...item.interlinks, ...(DEFAULT_CLUSTER_INTERLINKS[item.category] || [])]
+    .filter((link, index, all) => all.findIndex((other) => other.slug === link.slug) === index)
+    .filter((link) => knownArticleSlugs.has(link.slug) && !present.has(link.slug));
+  const missing = candidates.slice(0, Math.max(0, 3 - present.size));
+  if (!missing.length) return post;
+  const links = missing.map((link) => `<a href="/artigos/${link.slug}">${link.anchor}</a>`).join("; ");
+  return {
+    ...post,
+    contentHtml: `${post.contentHtml}\n<p>Leia também: ${links}.</p>`,
+  };
+}
+
 // Registra o custo de cada chamada de IA (por post e etapa) em generation_log.
 // Falha de log nunca quebra a geração.
 type AiUsage = { provider: string; model: string; usage: { inputTokens: number; outputTokens: number } | null };
@@ -713,6 +742,8 @@ async function createFromPauta(
       if (error instanceof PipelineStageError) throw error;
       // Falha estilística não bloqueia; conserva-se a versão factual aprovada.
     }
+
+    post = ensureInternalLinks(post, item, knownArticleSlugs);
 
     // 5) Auditoria SEO; uma correção precisa ser reavaliada pelo próprio auditor.
     const runSeoAudit = async (candidate: GenPost, stage: string) => {
