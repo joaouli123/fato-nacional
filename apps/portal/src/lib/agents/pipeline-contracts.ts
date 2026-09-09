@@ -338,7 +338,11 @@ export const gateDecisionSchema = z.object({
 export type GateDecision = z.infer<typeof gateDecisionSchema>;
 
 export function parseAgentOutput<T>(schema: z.ZodType<T>, value: unknown, label: string): T {
-  const parsed = schema.safeParse(value);
+  // Alguns modelos compatíveis envolvem um objeto único em uma lista mesmo
+  // quando o contrato pede um objeto. Aceitamos apenas esse invólucro seguro;
+  // listas com zero ou vários itens continuam reprovadas pelo contrato.
+  const candidate = Array.isArray(value) && value.length === 1 ? value[0] : value;
+  const parsed = schema.safeParse(candidate);
   if (parsed.success) return parsed.data;
   const detail = parsed.error.issues
     .slice(0, 8)
