@@ -544,7 +544,16 @@ async function requiredResearch(topic: string, keyword: string, today: string, s
       false,
     );
   }
-  const text = (r.text || "").trim().slice(0, 12_000);
+  // O modelo pode resumir as fontes sem repetir as URLs completas. Preserve
+  // sempre a evidência coletada pelo servidor junto da síntese do modelo, para
+  // que os gates e o redator trabalhem com links verificáveis.
+  const collectedEvidence = sources
+    .map((source, index) => `${index + 1}. ${source.title}\nURL: ${source.url}\nResumo coletado: ${source.snippet || "(sem resumo)"}`)
+    .join("\n");
+  const text = [
+    (r.text || "").trim(),
+    `FONTES COLETADAS E URLs VERIFICÁVEIS:\n${collectedEvidence}`,
+  ].filter(Boolean).join("\n\n").slice(0, 12_000);
   const urls = text.match(/https?:\/\/[^\s)\]}>"']+/gi) || [];
   if (text.length < 400 || new Set(urls).size < 2) {
     throw new PipelineStageError("Pesquisa sem evidência suficiente ou URLs verificáveis", "research", true);
