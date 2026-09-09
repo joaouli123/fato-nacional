@@ -493,6 +493,15 @@ function validPauta(p: Partial<BacklogItem> | null, existing: Set<string>): p is
   );
 }
 
+function stripInvalidExternalLinks(html: string, invalid: CheckedExternalSource[]): string {
+  const broken = new Set(invalid.map((link) => link.href.trim()));
+  if (!broken.size) return html;
+  return html.replace(
+    /<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi,
+    (full, href: string, body: string) => (broken.has(href.trim()) ? body : full),
+  );
+}
+
 // Registra o custo de cada chamada de IA (por post e etapa) em generation_log.
 // Falha de log nunca quebra a geração.
 type AiUsage = { provider: string; model: string; usage: { inputTokens: number; outputTokens: number } | null };
@@ -785,6 +794,13 @@ async function createFromPauta(
 
     // 6) URLs reais alimentam o gate determinístico. Um único reparo é permitido.
     let linkAudit = await auditArticleLinks({ html: post.contentHtml, knownArticleSlugs, ymyl: item.ymyl });
+    if (linkAudit.invalidExternal.length) {
+      const cleanedHtml = stripInvalidExternalLinks(post.contentHtml, linkAudit.invalidExternal);
+      if (cleanedHtml !== post.contentHtml) {
+        post = { ...post, contentHtml: cleanedHtml };
+        linkAudit = await auditArticleLinks({ html: post.contentHtml, knownArticleSlugs, ymyl: item.ymyl });
+      }
+    }
     const gateFor = (candidate: GenPost, issues: string[]) => scoreArticle({
       slug: item.slug,
       headline: item.title,
@@ -822,9 +838,16 @@ async function createFromPauta(
         maxTokens: 14_000,
       });
       logAi(item.slug, item.title, "reparo", repaired);
-      const candidate = parseAgentOutput(generatedPostSchema, repaired.data, "Reparo do gate");
-      const [candidateAudit, repairedFactCheck, repairedSeo] = await Promise.all([
-        auditArticleLinks({ html: candidate.contentHtml, knownArticleSlugs, ymyl: item.ymyl }),
+      let candidate = parseAgentOutput(generatedPostSchema, repaired.data, "Reparo do gate");
+      let candidateAudit = await auditArticleLinks({ html: candidate.contentHtml, knownArticleSlugs, ymyl: item.ymyl });
+      if (candidateAudit.invalidExternal.length) {
+        const cleanedHtml = stripInvalidExternalLinks(candidate.contentHtml, candidateAudit.invalidExternal);
+        if (cleanedHtml !== candidate.contentHtml) {
+          candidate = { ...candidate, contentHtml: cleanedHtml };
+          candidateAudit = await auditArticleLinks({ html: candidate.contentHtml, knownArticleSlugs, ymyl: item.ymyl });
+        }
+      }
+      const [repairedFactCheck, repairedSeo] = await Promise.all([
         runFactCheck(candidate, "rechecagem factual pós-reparo"),
         runSeoAudit(candidate, "rechecagem SEO pós-reparo"),
       ]);
