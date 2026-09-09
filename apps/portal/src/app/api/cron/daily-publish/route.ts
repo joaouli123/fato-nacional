@@ -533,6 +533,16 @@ function ensureInternalLinks(post: GenPost, item: BacklogItem, knownArticleSlugs
   };
 }
 
+function parsePostOutput(value: unknown, fallback: GenPost, label: string): GenPost {
+  const candidates = Array.isArray(value) ? value : [value];
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) continue;
+    const parsed = generatedPostSchema.safeParse({ ...fallback, ...(candidate as Record<string, unknown>) });
+    if (parsed.success) return parsed.data;
+  }
+  return parseAgentOutput(generatedPostSchema, value, label);
+}
+
 // Registra o custo de cada chamada de IA (por post e etapa) em generation_log.
 // Falha de log nunca quebra a geração.
 type AiUsage = { provider: string; model: string; usage: { inputTokens: number; outputTokens: number } | null };
@@ -693,7 +703,7 @@ async function createFromPauta(
         maxTokens: 14_000,
       });
       logAi(item.slug, item.title, `correção factual r${round + 1}`, fixed);
-      post = parseAgentOutput(generatedPostSchema, fixed.data, "Correção factual");
+      post = parsePostOutput(fixed.data, post, "Correção factual");
       factual = await runFactCheck(post, `rechecagem/fatos r${round + 1}`);
     }
     const factualGate = gateDecision(
@@ -725,7 +735,7 @@ async function createFromPauta(
     try {
       const h = await generateJson<GenPost>(humanizePrompt(post, item), { model: HUMANIZER, maxTokens: 14_000 });
       logAi(item.slug, item.title, "lapidação", h);
-      const polished = parseAgentOutput(generatedPostSchema, h.data, "Lapidação");
+      const polished = parsePostOutput(h.data, post, "Lapidação");
       if (keepsStructure(post.contentHtml, polished.contentHtml)) {
         const beforePolish = post;
         post = polished;
@@ -772,7 +782,7 @@ async function createFromPauta(
           { model: GPT, maxTokens: 20_000 },
         );
         logAi(item.slug, item.title, `correção seo r${round + 1}${attempt > 0 ? " (retry)" : ""}`, fixed);
-        const parsed = parseAgentOutput(generatedPostSchema, fixed.data, "Correção SEO");
+        const parsed = parsePostOutput(fixed.data, post, "Correção SEO");
         if (keepsStructure(post.contentHtml, parsed.contentHtml)) candidate = parsed;
       }
       if (!candidate) {
@@ -871,7 +881,7 @@ async function createFromPauta(
         maxTokens: 20_000,
       });
       logAi(item.slug, item.title, "reparo", repaired);
-      let candidate = parseAgentOutput(generatedPostSchema, repaired.data, "Reparo do gate");
+      let candidate = parsePostOutput(repaired.data, post, "Reparo do gate");
       let candidateAudit = await auditArticleLinks({ html: candidate.contentHtml, knownArticleSlugs, ymyl: item.ymyl });
       if (candidateAudit.invalidExternal.length) {
         const cleanedHtml = stripInvalidExternalLinks(candidate.contentHtml, candidateAudit.invalidExternal);
@@ -1276,7 +1286,7 @@ async function runUpdateSlot(
         maxTokens: 20_000,
       });
       logAi(doc.slug, doc.headline, "correção factual da atualização", fixed);
-      post = parseAgentOutput(generatedPostSchema, fixed.data, "Correção factual da atualização");
+      post = parsePostOutput(fixed.data, post, "Correção factual da atualização");
       writerIdentity = { provider: fixed.provider, model: fixed.model };
       factual = await runFactCheck(post, "rechecagem factual da atualização");
     }
@@ -1320,7 +1330,7 @@ async function runUpdateSlot(
         maxTokens: 20_000,
       });
       logAi(doc.slug, doc.headline, "correção SEO da atualização", fixed);
-      const candidate = parseAgentOutput(generatedPostSchema, fixed.data, "Correção SEO da atualização");
+      const candidate = parsePostOutput(fixed.data, post, "Correção SEO da atualização");
       if (!keepsStructure(post.contentHtml, candidate.contentHtml)) {
         return quarantine("search_audit", "Correção SEO removeu estrutura ou evidências", candidate);
       }
@@ -1402,7 +1412,7 @@ async function runUpdateSlot(
         maxTokens: 14_000,
       });
       logAi(doc.slug, doc.headline, "reparo técnico da atualização", repaired);
-      const candidate = parseAgentOutput(generatedPostSchema, repaired.data, "Reparo técnico da atualização");
+      const candidate = parsePostOutput(repaired.data, post, "Reparo técnico da atualização");
       if (!keepsStructure(post.contentHtml, candidate.contentHtml)) {
         return quarantine("technical_gate", "Reparo técnico removeu estrutura ou evidências", candidate);
       }
