@@ -353,5 +353,18 @@ export function parseAgentOutput<T>(schema: z.ZodType<T>, value: unknown, label:
     .slice(0, 8)
     .map((issue) => `${issue.path.join(".") || "root"}: ${issue.message}`)
     .join("; ");
+  if (Array.isArray(value) && value.length === 1) {
+    const item = schema.safeParse(value[0]);
+    if (!item.success) {
+      const itemDetail = item.error.issues
+        .slice(0, 8)
+        .map((issue) => `${issue.path.join(".") || "root"}: ${issue.message}`)
+        .join("; ");
+      throw new Error(`${label} inválido: resposta veio em lista de 1 item; item: ${itemDetail}`);
+    }
+  }
+  if (Array.isArray(value) && value.length > 1) {
+    throw new Error(`${label} inválido: resposta veio em lista com ${value.length} itens; esperado um único objeto`);
+  }
   throw new Error(`${label} inválido: ${detail}`);
 }
